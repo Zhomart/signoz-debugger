@@ -1,7 +1,11 @@
 # How to debug Signoz
 
+https://github.com/SigNoz/signoz/issues/2058
+
+Based on signoz 0.14.0 (branch main)
+
 1. `docker-compose up -d`
-2. Update `fake/log.json`
+2. (optional) Update `fake/log.json`
 2. `docker-compose restart otel-collector`
 2. `docker-compose logs -f otel-collector`
 3. Check the logs.
@@ -15,3 +19,12 @@
 5. Open Signoz UI: http://localhost:3301/logs  
     - Change search dates
     - Search with id
+
+
+## Useful docs
+
+1. https://github.com/open-telemetry/opentelemetry-collector
+  * Source code of Otel Collector. Read `docs/` and `receivers/` subfolders.
+2. https://github.com/open-telemetry/opentelemetry-collector-contrib
+  * Extensions to Otel Collector (syslog receiver is here). Read `receivers/` folder.
+3. https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/operators

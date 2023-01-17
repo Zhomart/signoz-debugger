@@ -75,33 +75,95 @@ receivers:
     start_at: beginning
     include_file_path: true
     force_flush_period: 10s
-    attributes:
-      reason: because_kotak
+    # attributes:
+    #   reason: because_kotak
     operators:
       - type: json_parser
         if: 'body matches "{.+}"'
         parse_from: body
         parse_to: attributes
-        timestamp:
-          parse_from: body.timestamp
-          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
-      - type: move
-        from: attributes.message
-        to: body
-      - type: stdout
-
-        # parse_to: body
+        # ## Timestamp docs: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/types/timestamp.md
+        # ## bug: https://github.com/SigNoz/signoz/issues/2058
         # timestamp:
         #   parse_from: attributes.timestamp
-        #   layout: '%Y-%m-%dT%H:%M:%S.%LZ'
-      # - type: json_parser
-      #   parse_from: attributes.asd
-      #   parse_to: attributes.asd
-      #   timestamp:
-      #     parse_from: attributes.asd.timestamp
-      #     layout: '%Y-%m-%dT%H:%M:%S.%LZ'
-      # - type: stdout
-        # on_error: drop
+        #   # layout_type: gotime
+        #   layout_type: strptime
+        #   # layout: '2006-01-02T15:04:05Z07:00' # gotime
+        #   ### python: datetime.strptime("2008-09-03T20:56:35.450686Z", "%Y-%m-%dT%H:%M:%S.%fZ")
+        #   layout: '%Y-%m-%dT%H:%M:%S.%fZ'
+        #   # layout: '%Y-%m-%dT%H:%M:%S.%f%z' # for RFC3339
+      # - type: remove # no need for the extra timestamp attr, it's causing timestamp bugs
+      #   field: attributes.timestamp
+      #   if: '"timestamp" in attributes'
+      # router docs: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/pkg/stanza/docs/operators/router.md
+      - type: router
+        routes:
+          - output: move_response_bytes
+            expr: '"httpResponse" in attributes' # httpResponse exists, it means this is a request/response log
+          - output: move_request_remote_ip # Zhomart: no test
+            expr: '"httpRequest" in attributes' # httpRequest exists, it means this is a request log only
+        default: move_json_message
+      - type: move
+        id: move_response_bytes
+        from: attributes.httpResponse.bytes
+        to: attributes.responseBytes
+      - type: move
+        id: move_response_elapsed
+        from: attributes.httpResponse.elapsed
+        to: attributes.responseElapsedMillis
+      - type: move
+        id: move_response_status
+        from: attributes.httpResponse.status
+        to: attributes.responseStatus
+      # - type: remove 
+      #   id: remove_response
+      #   field: attributes.httpResponse
+      # httpRequest block starts here
+      - type: move
+        id: move_request_remote_ip
+        from: attributes.httpRequest.remoteIP
+        to: attributes.remoteIP
+      - type: move
+        id: move_request_id
+        from: attributes.httpRequest.requestID
+        to: attributes.requestID
+      - type: move
+        id: move_request_method
+        from: attributes.httpRequest.requestMethod
+        to: attributes.requestMethod
+      - type: move
+        id: move_request_path
+        from: attributes.httpRequest.requestPath
+        to: attributes.requestPath
+      # - type: remove
+      #   id: remove_request
+      #   field: attributes.httpRequest
+      - type: move
+        id: move_json_message
+        from: attributes.message
+        to: body
+      - type: move
+        id: move_AppCommitSha
+        from: attributes.tags.AppCommitSha
+        to: attributes.AppCommitSha
+        if: '"tags" in attributes'
+      - type: move
+        id: move_AppVersion
+        from: attributes.tags.AppVersion
+        to: attributes.AppVersion
+        if: '"tags" in attributes'
+      - type: severity_parser
+        parse_from: attributes.level
+        if: '"level" in attributes'
+        mapping:
+          fatal: [ 'fatal', 'panic' ]
+          error: error
+          warn: warn
+          info: info
+          debug: debug
+          trace: trace
+      - type: stdout  ## prints to stdout, but doesn't send to clickhouse
+      # - type: noop
 
 processors:
   batch:
