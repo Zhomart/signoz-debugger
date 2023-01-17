@@ -67,7 +67,41 @@ receivers:
               - localhost:8888
             labels:
               job_name: otel-collector
+  # check clickhouse:
+  #  - open: http://localhost:8123/play
+  #  - SQ: select * from signoz_logs.logs order by observed_timestamp desc limit 10;
+  filelog/custom:
+    include: [ "/fake/log.json" ]
+    start_at: beginning
+    include_file_path: true
+    force_flush_period: 10s
+    attributes:
+      reason: because_kotak
+    operators:
+      - type: json_parser
+        if: 'body matches "{.+}"'
+        parse_from: body
+        parse_to: attributes
+        timestamp:
+          parse_from: body.timestamp
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      - type: move
+        from: attributes.message
+        to: body
+      - type: stdout
 
+        # parse_to: body
+        # timestamp:
+        #   parse_from: attributes.timestamp
+        #   layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      # - type: json_parser
+      #   parse_from: attributes.asd
+      #   parse_to: attributes.asd
+      #   timestamp:
+      #     parse_from: attributes.asd.timestamp
+      #     layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+      # - type: stdout
+        # on_error: drop
 
 processors:
   batch:
@@ -127,7 +161,7 @@ exporters:
     endpoint: tcp://clickhouse:9000/?database=signoz_metrics
   prometheus:
     endpoint: 0.0.0.0:8889
-  # logging: {}
+  logging: {}
 
   clickhouselogsexporter:
     dsn: tcp://clickhouse:9000/
@@ -145,31 +179,38 @@ service:
   telemetry:
     metrics:
       address: 0.0.0.0:8888
+  # https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/troubleshooting.md
+    logs:
+      level: "debug"
   extensions:
     - health_check
     - zpages
     - pprof
   pipelines:
-    traces:
-      receivers: [jaeger, otlp]
-      processors: [signozspanmetrics/prometheus, batch]
-      exporters: [clickhousetraces]
-    metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [clickhousemetricswrite]
-    metrics/generic:
-      receivers: [hostmetrics]
-      processors: [resourcedetection, batch]
-      exporters: [clickhousemetricswrite]
-    metrics/prometheus:
-      receivers: [prometheus]
-      processors: [batch]
-      exporters: [clickhousemetricswrite/prometheus]
-    metrics/spanmetrics:
-      receivers: [otlp/spanmetrics]
-      exporters: [prometheus]
+    # traces:
+    #   receivers: [jaeger, otlp]
+    #   processors: [signozspanmetrics/prometheus, batch]
+    #   exporters: [clickhousetraces]
+    # metrics:
+    #   receivers: [otlp]
+    #   processors: [batch]
+    #   exporters: [clickhousemetricswrite]
+    # metrics/generic:
+    #   receivers: [hostmetrics]
+    #   processors: [resourcedetection, batch]
+    #   exporters: [clickhousemetricswrite]
+    # metrics/prometheus:
+    #   receivers: [prometheus]
+    #   processors: [batch]
+    #   exporters: [clickhousemetricswrite/prometheus]
+    # metrics/spanmetrics:
+    #   receivers: [otlp/spanmetrics]
+    #   exporters: [prometheus]
+    # logs:
+    #   receivers: [otlp, filelog/dockercontainers]
+    #   processors: [batch]
+    #   exporters: [clickhouselogsexporter]
     logs:
-      receivers: [otlp, filelog/dockercontainers]
+      receivers: [otlp, filelog/custom]
       processors: [batch]
-      exporters: [clickhouselogsexporter]
+      exporters: [clickhouselogsexporter, logging]
